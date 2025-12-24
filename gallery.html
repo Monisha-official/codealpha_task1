@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Responsive Image Gallery — Lightbox, Filters, Categories</title>
+  <style>
+    :root{--bg:#f6f4f8;--card:#fff;--accent:#8b5fbf;--muted:#9b8ea6}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial;background:var(--bg);color:#222}
+
+    .wrap{max-width:1200px;margin:32px auto;padding:20px}
+    /* Header: two-column intro + featured/contributors */
+    header{margin-bottom:18px}
+    .header-grid{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
+    .intro h1{font-size:28px;margin:0;color:var(--accent);margin-bottom:8px}
+    .intro p{margin:0 0 12px;color:#60546a}
+    .intro .cta{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;background:linear-gradient(90deg,var(--accent),#6a3fb7);color:#fff;border-radius:12px;text-decoration:none;font-weight:600;box-shadow:0 10px 28px rgba(139,95,191,0.16);border:1px solid rgba(255,255,255,0.06);transition:transform .14s,box-shadow .14s,opacity .14s}
+    .intro .cta:hover{transform:translateY(-3px);box-shadow:0 18px 44px rgba(139,95,191,0.22);opacity:0.98}
+    .intro .cta:active{transform:translateY(-1px)}
+    .intro .cta:focus{outline:3px solid rgba(139,95,191,0.14);outline-offset:3px}
+
+    .featured-card{background:var(--card);border-radius:14px;padding:12px;box-shadow:0 8px 30px rgba(36,29,85,0.06);overflow:hidden}
+    .featured-thumb{width:100%;height:160px;border-radius:10px;overflow:hidden;margin-bottom:10px}
+    .contributors{margin-top:6px}
+    .contributors h4{margin:0 0 8px 0;color:#222}
+    .contrib-list{display:flex;flex-direction:column;gap:8px}
+    .contrib{display:flex;align-items:center;gap:10px}
+    .avatar{width:36px;height:36px;border-radius:999px;background:#ddd;overflow:hidden}
+    .avatar img{width:100%;height:100%;object-fit:cover}
+
+    /* Controls */
+    .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .btn{background:var(--card);border:1px solid rgba(0,0,0,0.06);padding:8px 12px;border-radius:999px;cursor:pointer;box-shadow:0 6px 18px rgba(36,29,85,0.06);transition:all .18s;display:inline-flex;align-items:center;gap:8px}
+    .btn:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(36,29,85,0.09)}
+    .btn.active{background:var(--accent);color:white;border-color:var(--accent)}
+
+    .filters{display:flex;gap:8px;flex-wrap:wrap}
+    .toolbar{display:flex;gap:12px;align-items:center}
+
+    /* Grid */
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:18px}
+    .item{background:var(--card);border-radius:14px;padding:10px;display:flex;flex-direction:column;align-items:stretch;gap:10px;box-shadow:0 6px 20px rgba(36,29,85,0.05);transition:transform .22s,box-shadow .22s}
+    .item:hover{transform:translateY(-6px);box-shadow:0 18px 36px rgba(36,29,85,0.08)}
+
+    /* Thumbnails as rounded rectangles; fixed uniform size for consistent layout */
+    :root{--thumb-h:220px}
+    .thumb{width:100%;height:var(--thumb-h);border-radius:14px;overflow:hidden;display:block;background:linear-gradient(180deg,#f3eef6,#efeaf0);position:relative}
+    .thumb img{width:100%;height:100%;object-fit:cover;display:block;transition:opacity .35s,transform .35s,filter .3s;opacity:0}
+    .thumb img.loaded{opacity:1}
+    .meta{text-align:left;padding:6px 4px}
+    .title{font-weight:700;color:#222}
+    .cat{font-size:12px;color:var(--muted);margin-top:6px}
+    /* large items span columns but keep same fixed height so grid stays even */
+    .item.large{grid-column:span 2}
+
+    /* Lightbox */
+    .lightbox{position:fixed;inset:0;display:none;background:rgba(12,8,20,0.7);align-items:center;justify-content:center;padding:24px;z-index:60}
+    .lightbox.open{display:flex}
+    .lb-inner{max-width:1100px;width:100%;background:rgba(255,255,255,0.02);border-radius:12px;padding:18px;display:flex;align-items:center;gap:16px}
+    .lb-img{flex:1;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+    .lb-img img{max-width:100%;max-height:75vh;object-fit:contain}
+    .lb-side{width:320px;color:#fff}
+    .lb-caption{font-size:18px;margin-bottom:6px}
+    .lb-sub{font-size:13px;color:#d7cfe6;margin-bottom:12px}
+    .lb-actions{display:flex;gap:8px}
+    .icon-btn{width:44px;height:44px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.04);cursor:pointer}
+
+    /* Image filter controls */
+    .filters-panel{display:flex;gap:8px;align-items:center}
+    .filter-select{padding:8px;border-radius:10px;border:1px solid rgba(0,0,0,0.06);background:var(--card)}
+
+    /* Small screens */
+    @media (max-width:1000px){.grid{grid-template-columns:repeat(3,1fr)}.lb-side{display:none}.lb-inner{flex-direction:column}}
+    @media (max-width:720px){.grid{grid-template-columns:repeat(2,1fr)}header{flex-direction:column;align-items:flex-start}}
+    @media (max-width:420px){
+      .grid{grid-template-columns:1fr}
+      :root{--thumb-h:180px}
+      .thumb{width:100%;border-radius:14px}
+      .item{padding:10px}
+    }
+    
+    /* List / card view (single-column large cards) */
+    .view-list .grid{grid-template-columns:1fr}
+    .view-list .item{border-radius:18px;padding:20px}
+    .view-list .thumb{height:340px;border-radius:12px}
+    .view-list .meta{padding:14px}
+    .view-list .title{font-size:20px}
+
+    /* subtle transition for filters applied to grid images */
+    .filtered img{filter:var(--img-filter, none)}
+    /* Card overlay: author/avatar bottom-left, download button bottom-right, watermark top-left */
+    .thumb{position:relative}
+    .item .card-overlay{position:absolute;left:12px;right:12px;bottom:12px;display:flex;justify-content:space-between;align-items:center;padding:0;pointer-events:none}
+    .item .card-overlay .author{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg, rgba(0,0,0,0.34), rgba(0,0,0,0.16));backdrop-filter:blur(4px);color:#fff;padding:8px 10px;border-radius:999px;pointer-events:auto}
+    .item .card-overlay .author .avatar{width:36px;height:36px;border-radius:999px;overflow:hidden;border:2px solid rgba(255,255,255,0.9);flex:0 0 36px}
+    .item .card-overlay .author .avatar img{width:100%;height:100%;object-fit:cover;display:block}
+    .item .card-overlay .author .name{font-weight:600;font-size:14px}
+    .item .card-overlay .actions{display:flex;gap:10px;align-items:center;pointer-events:auto}
+    .item .card-overlay .download-btn{width:44px;height:44px;border-radius:12px;background:#fff;color:#111;border:none;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(11,8,20,0.12);cursor:pointer}
+    .item .card-overlay .download-btn svg{width:18px;height:18px;fill:currentColor}
+    .item .watermark{position:absolute;top:10px;left:10px;background:rgba(255,255,255,0.92);padding:6px 8px;border-radius:10px;font-weight:700;color:var(--accent);font-size:12px;pointer-events:none;opacity:0.95}
+    /* Submit modal */
+    .submit-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(12,8,20,0.55);z-index:80;padding:20px}
+    .submit-modal.open{display:flex}
+    .submit-card{width:720px;max-width:100%;background:var(--card);padding:18px;border-radius:12px;box-shadow:0 18px 40px rgba(36,29,85,0.12)}
+    .submit-card h3{margin:0 0 12px}
+    .submit-row{display:flex;gap:8px;margin-bottom:8px}
+    .submit-row > *{flex:1}
+    .submit-row.small > *{flex:0 0 140px}
+    .submit-card input,.submit-card select,.submit-card textarea{width:100%;padding:8px;border:1px solid rgba(0,0,0,0.06);border-radius:8px}
+    .submit-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="header-grid">
+        <div class="intro">
+          <h1>Nature, City & People — Curated collection</h1>
+          <p>Explore a carefully selected set of photos — landscapes, cityscapes and portraits. Click any image to view it larger, use filters or browse by category.</p>
+          <a class="cta" href="#">Submit to Gallery</a>
+
+          <div style="margin-top:18px">
+            <div class="controls">
+              <div class="filters" role="tablist" aria-label="Categories">
+                <button class="btn active" data-filter="all">All</button>
+                <button class="btn" data-filter="nature">Nature</button>
+                <button class="btn" data-filter="city">City</button>
+                <button class="btn" data-filter="people">People</button>
+              </div>
+
+              <div class="toolbar">
+                <div class="filters-panel">
+                  <label style="font-size:13px;color:#6b5f73;">Filter:</label>
+                  <select id="imgFilter" class="filter-select" aria-label="Image visual filter">
+                    <option value="none">None</option>
+                    <option value="grayscale(100%)">Grayscale</option>
+                    <option value="sepia(60%)">Sepia</option>
+                    <option value="contrast(120%)">Contrast</option>
+                    <option value="saturate(140%)">Saturate</option>
+                  </select>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <button class="btn" id="viewGrid">Grid</button>
+                  <button class="btn" id="viewList">List</button>
+                </div>
+                <button class="btn" id="prevBtn" title="Previous">Prev</button>
+                <button class="btn" id="nextBtn" title="Next">Next</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside>
+          <div class="featured-card">
+            <div class="featured-thumb"><img src="https://images.unsplash.com/photo-1524678606370-a47ad25cb82a?q=80&w=1600&auto=format&fit=crop" alt="Featured" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+            <div class="contributors">
+              <h4>Top contributors</h4>
+              <div class="contrib-list">
+                <div class="contrib"><span class="avatar"><img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=80&auto=format&fit=crop" alt="a"></span><div><div style="font-weight:600">Marek Piwnicki</div><div style="font-size:12px;color:#7f6f8b">@marekpiwnicki</div></div></div>
+                <div class="contrib"><span class="avatar"><img src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?q=80&w=80&auto=format&fit=crop" alt="b"></span><div><div style="font-weight:600">Wolfgang Hasselmann</div><div style="font-size:12px;color:#7f6f8b">@wolfgang_hasselmann</div></div></div>
+                <div class="contrib"><span class="avatar"><img src="https://images.unsplash.com/photo-1531123414780-f5f3b29f8a7a?q=80&w=80&auto=format&fit=crop" alt="c"></span><div><div style="font-weight:600">Annie Spratt</div><div style="font-size:12px;color:#7f6f8b">@anniespratt</div></div></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </header>
+
+    <main>
+      <section id="gallery" class="grid">
+        <!-- Items: thumbnails use Unsplash source with fixed sizes -->
+        <!-- Each item has data-category and data-caption for JS -->
+
+        <article class="item large" data-category="nature" data-src="https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=1600&auto=format&fit=crop" data-caption="Mountain lake at sunrise">
+          <a class="thumb" href="#" aria-label="Open Mountain lake at sunrise"><img src="https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=800&auto=format&fit=crop" alt="Mountain lake"></a>
+          <div class="meta"><div class="title">Mountain lake</div><div class="cat">Nature</div></div>
+        </article>
+
+        <article class="item" data-category="city" data-src="https://images.unsplash.com/photo-1467269204594-9661b134dd2b?q=80&w=1600&auto=format&fit=crop" data-caption="City skyline at dusk">
+          <a class="thumb" href="#" aria-label="Open City skyline at dusk"><img src="https://images.unsplash.com/photo-1467269204594-9661b134dd2b?q=80&w=800&auto=format&fit=crop" alt="City skyline"></a>
+          <div class="meta"><div class="title">City skyline</div><div class="cat">City</div></div>
+        </article>
+
+        <article class="item" data-category="people" data-src="https://plus.unsplash.com/premium_photo-1765663371886-2abc505e9165?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHx0b3BpYy1mZWVkfDEzfHRvd0paRnNrcEdnfHxlbnwwfHx8fHw=" data-caption="Smiling woman portrait">
+          <a class="thumb" href="#" aria-label="Open Smiling woman portrait"><img src="https://plus.unsplash.com/premium_photo-1765663371886-2abc505e9165?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHx0b3BpYy1mZWVkfDEzfHRvd0paRnNrcEdnfHxlbnwwfHx8fHw%3D" alt="Woman portrait"></a>
+          <div class="meta"><div class="title">Portrait</div><div class="cat">People</div></div>
+        </article>
+
+        <article class="item" data-category="nature" data-src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop" data-caption="Forest path in autumn">
+          <a class="thumb" href="#" aria-label="Open Forest path in autumn"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=800&auto=format&fit=crop" alt="Forest path"></a>
+          <div class="meta"><div class="title">Forest path</div><div class="cat">Nature</div></div>
+        </article>
+
+        <article class="item large" data-category="city" data-src="https://images.squarespace-cdn.com/content/v1/554e1c83e4b08a0248ca70c4/1626428641313-PXSSNDNAP34XLSH1R9U6/Mint+Glows.jpg" data-caption="Night city street">
+          <a class="thumb" href="#" aria-label="Open Night city street"><img src="https://images.squarespace-cdn.com/content/v1/554e1c83e4b08a0248ca70c4/1626428641313-PXSSNDNAP34XLSH1R9U6/Mint+Glows.jpg" alt="Night street"></a>
+          <div class="meta"><div class="title">Night street</div><div class="cat">City</div></div>
+        </article>
+
+        <article class="item" data-category="people" data-src="https://images.unsplash.com/photo-1765353225650-2280f21cb79e?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHx0b3BpYy1mZWVkfDQxfHRvd0paRnNrcEdnfHxlbnwwfHx8fHw=" data-caption="Child playing">
+          <a class="thumb" href="#" aria-label="Open Child playing"><img src="https://images.unsplash.com/photo-1765353225650-2280f21cb79e?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHx0b3BpYy1mZWVkfDQxfHRvd0paRnNrcEdnfHxlbnwwfHx8fHw%3D"></a>
+          <div class="meta"><div class="title">Child</div><div class="cat">People</div></div>
+        </article>
+
+        <article class="item" data-category="nature" data-src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=1600&auto=format&fit=crop" data-caption="Desert dunes">
+          <a class="thumb" href="#" aria-label="Open Desert dunes"><img src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=800&auto=format&fit=crop" alt="Desert"></a>
+          <div class="meta"><div class="title">Dunes</div><div class="cat">Nature</div></div>
+        </article>
+
+        <article class="item" data-category="city" data-src="https://c.files.bbci.co.uk/24f2/live/491a48e0-1db9-11f0-a3df-cd11636dc668.jpg" data-caption="Bridge architecture">
+          <a class="thumb" href="#" aria-label="Open Bridge architecture"><img src="https://c.files.bbci.co.uk/24f2/live/491a48e0-1db9-11f0-a3df-cd11636dc668.jpg" alt="Bridge"></a>
+          <div class="meta"><div class="title">Bridge</div><div class="cat">City</div></div>
+        </article>
+
+        <article class="item" data-category="people" data-src="https://i.guim.co.uk/img/media/58a6287e016188da65e7e24ee015d042ee94cbe9/0_0_7031_4223/master/7031.jpg?width=465&dpr=1&s=none&crop=none" data-caption="Man at work">
+          <a class="thumb" href="#" aria-label="Open Man at work"><img src="https://i.guim.co.uk/img/media/58a6287e016188da65e7e24ee015d042ee94cbe9/0_0_7031_4223/master/7031.jpg?width=465&dpr=1&s=none&crop=none"></a>
+          <div class="meta"><div class="title">Worker</div><div class="cat">People</div></div>
+        </article>
+
+        <article class="item" data-category="nature" data-src="https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?q=80&w=1600&auto=format&fit=crop" data-caption="Waterfall">
+          <a class="thumb" href="#" aria-label="Open Waterfall"><img src="https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?q=80&w=800&auto=format&fit=crop" alt="Waterfall"></a>
+          <div class="meta"><div class="title">Waterfall</div><div class="cat">Nature</div></div>
+        </article>
+
+        <!-- Additional images: 3 per category (nature, city, people) -->
+        <article class="item large" data-category="nature" data-src="https://images.unsplash.com/photo-1482192596544-9eb780fc7f66?q=80&w=1600&auto=format&fit=crop" data-caption="Snowy mountain peak">
+          <a class="thumb" href="#" aria-label="Open Snowy mountain peak"><img src="https://images.unsplash.com/photo-1482192596544-9eb780fc7f66?q=80&w=800&auto=format&fit=crop" alt="Snowy mountain"></a>
+          <div class="meta"><div class="title">Snowy peak</div><div class="cat">Nature</div></div>
+        </article>
+
+        <article class="item" data-category="nature" data-src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1600&auto=format&fit=crop" data-caption="Rocky coastline at sunset">
+          <a class="thumb" href="#" aria-label="Open Rocky coastline at sunset"><img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800&auto=format&fit=crop" alt="Coastline"></a>
+          <div class="meta"><div class="title">Coastline</div><div class="cat">Nature</div></div>
+        </article>
+
+        <article class="item" data-category="nature" data-src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=1600&auto=format&fit=crop" data-caption="Misty valley">
+          <a class="thumb" href="#" aria-label="Open Misty valley"><img src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=800&auto=format&fit=crop" alt="Valley"></a>
+          <div class="meta"><div class="title">Misty valley</div><div class="cat">Nature</div></div>
+        </article>
+
+        <article class="item" data-category="city" data-src="https://res.cloudinary.com/sagacity/image/upload/c_crop,h_635,w_1000,x_0,y_0/c_limit,dpr_auto,f_auto,fl_lossy,q_80,w_1080/shutterstock_1670445019_wfoima.jpg" data-caption="Downtown lights">
+          <a class="thumb" href="#" aria-label="Open Downtown lights"><img src="https://res.cloudinary.com/sagacity/image/upload/c_crop,h_635,w_1000,x_0,y_0/c_limit,dpr_auto,f_auto,fl_lossy,q_80,w_1080/shutterstock_1670445019_wfoima.jpg" alt="Downtown"></a>
+          <div class="meta"><div class="title">Downtown</div><div class="cat">City</div></div>
+        </article>
+
+        <article class="item" data-category="city" data-src="https://www.thoughtco.com/thmb/a68O0bFaovgs1sGMTTGhlAsFF_Q=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/Constitutional-Convention-GettyImages-96816055x-56b0b36d3df78cf772d0a9a7.jpg" data-caption="Historic district">
+          <a class="thumb" href="#" aria-label="Open Historic district"><img src="https://www.thoughtco.com/thmb/a68O0bFaovgs1sGMTTGhlAsFF_Q=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/Constitutional-Convention-GettyImages-96816055x-56b0b36d3df78cf772d0a9a7.jpg" alt="Historic"></a>
+          <div class="meta"><div class="title">Historic</div><div class="cat">City</div></div>
+        </article>
+
+        <article class="item" data-category="city" data-src="https://media.istockphoto.com/id/1406960186/photo/the-skyline-of-new-york-city-united-states.jpg?s=612x612&w=0&k=20&c=yZJXNdzq3d5bKgvVzPBahBujpbVUXFyjyl9FN9L7esM=" data-caption="Modern skyline">
+          <a class="thumb" href="#" aria-label="Open Modern skyline"><img src="https://media.istockphoto.com/id/1406960186/photo/the-skyline-of-new-york-city-united-states.jpg?s=612x612&w=0&k=20&c=yZJXNdzq3d5bKgvVzPBahBujpbVUXFyjyl9FN9L7esM=" alt="Skyline"></a>
+          <div class="meta"><div class="title">Skyline</div><div class="cat">City</div></div>
+        </article>
+
+        <article class="item" data-category="people" data-src="https://www.yabeshphotography.com/wp-content/uploads/2023/02/Jayaraj-Ishu-Wedding-Photography-in-Coimbatore-9-scaled.jpg" data-caption="Candid street portrait">
+          <a class="thumb" href="#" aria-label="Open Candid street portrait"><img src="https://www.yabeshphotography.com/wp-content/uploads/2023/02/Jayaraj-Ishu-Wedding-Photography-in-Coimbatore-9-scaled.jpg"></a>
+          <div class="meta"><div class="title">Candid</div><div class="cat">People</div></div>
+        </article>
+
+        <article class="item" data-category="people" data-src="https://5.imimg.com/data5/SELLER/Default/2022/3/MC/BP/GR/148640419/hire-south-indian-chef-for-hotel.jpg" data-caption="Chef at work">
+          <a class="thumb" href="#" aria-label="Open Chef at work"><img src="https://5.imimg.com/data5/SELLER/Default/2022/3/MC/BP/GR/148640419/hire-south-indian-chef-for-hotel.jpg" alt="Chef"></a>
+          <div class="meta"><div class="title">Chef</div><div class="cat">People</div></div>
+        </article>
+
+        <article class="item" data-category="people" data-src="https://media.istockphoto.com/id/1391598177/photo/infian-best-friends-spending-time-together-outdoors-in-spring-park.jpg?s=612x612&w=0&k=20&c=atHIKPsH6tP_ZGR0CTtjNbyClNIfy2l-bAiN7aeBH8Y=">
+          <a class="thumb" href="#" aria-label="Open Friends laughing"><img src="https://media.istockphoto.com/id/1391598177/photo/infian-best-friends-spending-time-together-outdoors-in-spring-park.jpg?s=612x612&w=0&k=20&c=atHIKPsH6tP_ZGR0CTtjNbyClNIfy2l-bAiN7aeBH8Y=" alt="Friends"></a>
+          <div class="meta"><div class="title">Friends</div><div class="cat">People</div></div>
+        </article>
+
+        <!-- Added: 5 Nature images -->
+        <article class="item" data-category="nature" data-src="https://images.unsplash.com/photo-1470770903676-69b98201ea1c?q=80&w=1600&auto=format&fit=crop" data-caption="Alpine ridge at dusk">
+          <a class="thumb" href="#" aria-label="Open Alpine ridge at dusk"><img src="https://images.unsplash.com/photo-1470770903676-69b98201ea1c?q=80&w=800&auto=format&fit=crop" alt="Alpine ridge"></a>
+          <div class="meta"><div class="title">Alpine ridge</div><div class="cat">Nature</div></div>
+        </article>
+
+        <article class="item" data-category="nature" data-src="https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=1600&auto=format&fit=crop" data-caption="Glacial lake reflection">
+          <a class="thumb" href="#" aria-label="Open Glacial lake reflection"><img src="https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=800&auto=format&fit=crop" alt="Glacial lake"></a>
+          <div class="meta"><div class="title">Glacial lake</div><div class="cat">Nature</div></div>
+        </article>
+
+        <article class="item" data-category="nature" data-src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop" data-caption="Misty forest morning">
+          <a class="thumb" href="#" aria-label="Open Misty forest morning"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=800&auto=format&fit=crop" alt="Misty forest"></a>
+          <div class="meta"><div class="title">Misty forest</div><div class="cat">Nature</div></div>
+        </article>
+
+        <article class="item" data-category="nature" data-src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1600&auto=format&fit=crop" data-caption="Rocky coastline">
+          <a class="thumb" href="#" aria-label="Open Rocky coastline"><img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800&auto=format&fit=crop" alt="Coastline"></a>
+          <div class="meta"><div class="title">Rocky coast</div><div class="cat">Nature</div></div>
+        </article>
+
+        <article class="item" data-category="nature" data-src="https://images.unsplash.com/photo-1482192596544-9eb780fc7f66?q=80&w=1600&auto=format&fit=crop" data-caption="Snow-capped summit">
+          <a class="thumb" href="#" aria-label="Open Snow-capped summit"><img src="https://images.unsplash.com/photo-1482192596544-9eb780fc7f66?q=80&w=800&auto=format&fit=crop" alt="Snow summit"></a>
+          <div class="meta"><div class="title">Snow summit</div><div class="cat">Nature</div></div>
+        </article>
+
+        <!-- Added: 5 City images -->
+        <article class="item" data-category="city" data-src="https://images.pexels.com/photos/16781772/pexels-photo-16781772/free-photo-of-neons-in-downtown-at-night.jpeg" data-caption="Neon downtown at night">
+          <a class="thumb" href="#" aria-label="Open Neon downtown at night"><img src="https://images.pexels.com/photos/16781772/pexels-photo-16781772/free-photo-of-neons-in-downtown-at-night.jpeg" alt="Neon downtown"></a>
+          <div class="meta"><div class="title">Neon downtown</div><div class="cat">City</div></div>
+        </article>
+
+        <article class="item" data-category="city" data-src="https://idsb.tmgrup.com.tr/ly/uploads/images/2021/11/12/159014.jpg" data-caption="Historic bridge span">
+          <a class="thumb" href="#" aria-label="Open Historic bridge span"><img src="https://idsb.tmgrup.com.tr/ly/uploads/images/2021/11/12/159014.jpg" alt="Historic bridge"></a>
+          <div class="meta"><div class="title">Historic bridge</div><div class="cat">City</div></div>
+        </article>
+
+        <article class="item" data-category="city" data-src="https://thumbs.dreamstime.com/b/majestic-skyscraper-reflecting-vibrant-sunset-sky-glass-facade-elevation-stunning-modern-showcases-photorealistic-345913582.jpg" data-caption="Glass skyline reflection">
+          <a class="thumb" href="#" aria-label="Open Glass skyline reflection"><img src="https://thumbs.dreamstime.com/b/majestic-skyscraper-reflecting-vibrant-sunset-sky-glass-facade-elevation-stunning-modern-showcases-photorealistic-345913582.jpg" alt="Glass skyline"></a>
+          <div class="meta"><div class="title">Glass skyline</div><div class="cat">City</div></div>
+        </article>
+
+        <article class="item" data-category="city" data-src="https://preview.redd.it/a-rainy-afternoon-in-sydney-v0-9nn4m9zmouqc1.jpeg?width=640&crop=smart&auto=webp&s=1a6802349453102bea6677f9e5165dbe60bd9192" data-caption="Rainy street lights">
+          <a class="thumb" href="#" aria-label="Open Rainy street lights"><img src="https://preview.redd.it/a-rainy-afternoon-in-sydney-v0-9nn4m9zmouqc1.jpeg?width=640&crop=smart&auto=webp&s=1a6802349453102bea6677f9e5165dbe60bd9192" alt="Rainy street"></a>
+          <div class="meta"><div class="title">Rainy street</div><div class="cat">City</div></div>
+        </article>
+
+        <article class="item" data-category="city" data-src="https://images.fineartamerica.com/images-medium-large-5/archways-of-railway-viaduct-captured-at-verity-e-milligan.jpg" data-caption="Modern archways">
+          <a class="thumb" href="#" aria-label="Open Modern archways"><img src="https://images.fineartamerica.com/images-medium-large-5/archways-of-railway-viaduct-captured-at-verity-e-milligan.jpg" alt="Archways"></a>
+          <div class="meta"><div class="title">Archways</div><div class="cat">City</div></div>
+        </article>
+
+        <!-- Added: 5 People images -->
+        <article class="item" data-category="people" data-src="https://imgstaticcontent.lbb.in/lbbnew/wp-content/uploads/sites/1/2017/03/23142053/230317_IndianClassical-AmjadAliKhan.jpg" data-caption="Street musician">
+          <a class="thumb" href="#" aria-label="Open Street musician"><img src="https://imgstaticcontent.lbb.in/lbbnew/wp-content/uploads/sites/1/2017/03/23142053/230317_IndianClassical-AmjadAliKhan.jpg" alt="Musician"></a>
+          <div class="meta"><div class="title">Musician</div><div class="cat">People</div></div>
+        </article>
+
+        <article class="item" data-category="people" data-src="https://mandalameadow.com/wp-content/uploads/2020/06/Scroll-painting-India.jpg" data-caption="Craftsman at work">
+          <a class="thumb" href="#" aria-label="Open Craftsman at work"><img src="https://mandalameadow.com/wp-content/uploads/2020/06/Scroll-painting-India.jpg" alt="Craftsman"></a>
+          <div class="meta"><div class="title">Craftsman</div><div class="cat">People</div></div>
+        </article>
+
+        <article class="item" data-category="people" data-src="https://media.istockphoto.com/id/910391852/photo/portrait-of-an-old-indian-man.jpg?s=612x612&w=0&k=20&c=suJdDc6RCtslgIDDF04sCGj4WKYQ10tGRP3IxCX03Uc=" data-caption="Casual portrait">
+          <a class="thumb" href="#" aria-label="Open Casual portrait"><img src="https://media.istockphoto.com/id/910391852/photo/portrait-of-an-old-indian-man.jpg?s=612x612&w=0&k=20&c=suJdDc6RCtslgIDDF04sCGj4WKYQ10tGRP3IxCX03Uc=" alt="Portrait"></a>
+          <div class="meta"><div class="title">Portrait</div><div class="cat">People</div></div>
+        </article>
+
+        <article class="item" data-category="people" data-src="https://fabulouspic.com/wp-content/uploads/2024/10/Group-of-friends-raising-hands-against-a-landscape-with-text-_Friends-Forever.jpg" data-caption="Friends group">
+          <a class="thumb" href="#" aria-label="Open Friends group"><img src="https://fabulouspic.com/wp-content/uploads/2024/10/Group-of-friends-raising-hands-against-a-landscape-with-text-_Friends-Forever.jpg" alt="Friends group"></a>
+          <div class="meta"><div class="title">Friends group</div><div class="cat">People</div></div>
+        </article>
+
+      </section>
+    </main>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="lb-inner">
+        <div class="lb-img"><img id="lb-img" src="" alt=""></div>
+        <div class="lb-side">
+          <div class="lb-caption" id="lb-caption">Caption</div>
+          <div class="lb-sub" id="lb-sub">Category</div>
+          <div class="lb-actions">
+            <button id="lbPrev" class="icon-btn" title="Previous">◀</button>
+            <button id="lbNext" class="icon-btn" title="Next">▶</button>
+            <button id="lbClose" class="icon-btn" title="Close">✕</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Submit modal -->
+    <div id="submitModal" class="submit-modal" role="dialog" aria-hidden="true">
+      <div class="submit-card">
+        <h3>Submit to Gallery</h3>
+        <div class="submit-row">
+          <input id="s-title" placeholder="Title (required)" />
+          <select id="s-category" aria-label="Category">
+            <option value="nature">Nature</option>
+            <option value="city">City</option>
+            <option value="people">People</option>
+          </select>
+        </div>
+        <div class="submit-row">
+          <input id="s-src" placeholder="Image URL (required)" />
+        </div>
+        <div class="submit-row">
+          <input id="s-thumb" placeholder="Thumbnail URL (optional)" />
+        </div>
+        <div class="submit-row">
+          <input id="s-author" placeholder="Photographer / Author (optional)" />
+          <input id="s-avatar" placeholder="Author avatar URL (optional)" />
+        </div>
+        <div class="submit-row">
+          <textarea id="s-caption" placeholder="Caption (optional)" rows="2"></textarea>
+        </div>
+        <div class="submit-actions">
+          <button class="btn" id="s-cancel">Cancel</button>
+          <button class="btn active" id="s-submit">Submit</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Basic gallery logic: filtering, lightbox, next/prev, filters
+    const gallery = document.getElementById('gallery');
+    const items = Array.from(gallery.querySelectorAll('.item'));
+    // persisted submissions in localStorage
+    let savedSubmissions = JSON.parse(localStorage.getItem('gallery_submissions_v1') || '[]');
+    const filterBtns = document.querySelectorAll('[data-filter]');
+    const imgFilterSelect = document.getElementById('imgFilter');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const viewGridBtn = document.getElementById('viewGrid');
+    const viewListBtn = document.getElementById('viewList');
+    const wrap = document.querySelector('.wrap');
+
+    let currentIndex = 0; // index in visible items
+    let visibleItems = items.slice();
+
+    // Filtering by category
+    filterBtns.forEach(btn => btn.addEventListener('click', (e) => {
+      filterBtns.forEach(b=>b.classList.remove('active'));
+      e.currentTarget.classList.add('active');
+      const cat = e.currentTarget.dataset.filter;
+      visibleItems = cat === 'all' ? items.slice() : items.filter(i => i.dataset.category === cat);
+      renderVisible();
+    }));
+
+    function renderVisible(){
+      // hide all, then show filtered
+      items.forEach(i => i.style.display = visibleItems.includes(i) ? 'flex' : 'none');
+      // reset index to first visible
+      currentIndex = 0;
+    }
+
+    // Image filter (CSS filter) applied to thumbnails and lightbox
+    imgFilterSelect.addEventListener('change', () => {
+      const f = imgFilterSelect.value;
+      document.documentElement.style.setProperty('--img-filter', f);
+      // add a class to animate filter changes
+      gallery.classList.add('filtered');
+      setTimeout(()=>gallery.classList.remove('filtered'), 300);
+      // apply filter to lightbox if open
+      const lbImg = document.getElementById('lb-img');
+      if(lbImg && lbImg.style) lbImg.style.filter = f;
+    });
+
+    // View mode toggle (grid / list)
+    function setViewMode(mode){
+      if(mode === 'list'){
+        document.body.classList.add('view-list');
+        viewListBtn.classList.add('active');
+        viewGridBtn.classList.remove('active');
+      } else {
+        document.body.classList.remove('view-list');
+        viewGridBtn.classList.add('active');
+        viewListBtn.classList.remove('active');
+      }
+    }
+    viewGridBtn.addEventListener('click', ()=> setViewMode('grid'));
+    viewListBtn.addEventListener('click', ()=> setViewMode('list'));
+    // default
+    setViewMode('grid');
+
+    // Lightbox support
+    const lightbox = document.getElementById('lightbox');
+    const lbImgEl = document.getElementById('lb-img');
+    const lbCaption = document.getElementById('lb-caption');
+    const lbSub = document.getElementById('lb-sub');
+
+    // Open when clicking a thumb
+    items.forEach((it, idx) => {
+      const link = it.querySelector('.thumb');
+      link.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        // determine currentIndex within visibleItems
+        updateVisibleIndex(it);
+        openLightbox(currentIndex);
+      });
+    });
+
+    function updateVisibleIndex(item){
+      visibleItems = visibleItems.length ? visibleItems : items.slice();
+      currentIndex = visibleItems.indexOf(item);
+      if(currentIndex < 0) currentIndex = 0;
+    }
+
+    function openLightbox(index){
+      const it = visibleItems[index];
+      if(!it) return;
+      const src = it.dataset.src;
+      const cap = it.dataset.caption || '';
+      const cat = it.dataset.category || '';
+      lbImgEl.src = src;
+      lbImgEl.alt = cap;
+      lbCaption.textContent = cap;
+      lbSub.textContent = cat.charAt(0).toUpperCase()+cat.slice(1);
+      lightbox.classList.add('open');
+      lightbox.setAttribute('aria-hidden','false');
+    }
+
+    function closeLightbox(){
+      lightbox.classList.remove('open');
+      lightbox.setAttribute('aria-hidden','true');
+    }
+
+    document.getElementById('lbClose').addEventListener('click', closeLightbox);
+    document.getElementById('lbNext').addEventListener('click', () => navigate(1));
+    document.getElementById('lbPrev').addEventListener('click', () => navigate(-1));
+
+    // Next/Prev via toolbar
+    prevBtn.addEventListener('click', () => { if(visibleItems.length){ currentIndex = Math.max(0, currentIndex-1); openLightbox(currentIndex);} });
+    nextBtn.addEventListener('click', () => { if(visibleItems.length){ currentIndex = Math.min(visibleItems.length-1, currentIndex+1); openLightbox(currentIndex);} });
+
+    function navigate(dir){
+      if(!visibleItems.length) return;
+      currentIndex = (currentIndex + dir + visibleItems.length) % visibleItems.length;
+      openLightbox(currentIndex);
+    }
+
+    // keyboard support
+    document.addEventListener('keydown', (e)=>{
+      if(lightbox.classList.contains('open')){
+        if(e.key === 'ArrowRight') navigate(1);
+        if(e.key === 'ArrowLeft') navigate(-1);
+        if(e.key === 'Escape') closeLightbox();
+      }
+    });
+
+    // click outside to close
+    lightbox.addEventListener('click', (e)=>{ if(e.target === lightbox) closeLightbox(); });
+
+    // initial render
+    renderVisible();
+
+    // optional: lazy-loading improvement + graceful fallback and fade-in
+    document.querySelectorAll('.thumb img').forEach(img=>{
+      img.setAttribute('loading','lazy');
+      // fade in when loaded
+      img.addEventListener('load', ()=> img.classList.add('loaded'));
+      // replace broken images with a tiny SVG placeholder
+      img.addEventListener('error', ()=>{
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="%23efe8f3"/><text x="50%" y="50%" fill="%239b8ea6" dy=".35em" font-family="Arial, Helvetica, sans-serif" font-size="20" text-anchor="middle">Image unavailable</text></svg>';
+        img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+        img.classList.add('loaded');
+      });
+    });
+
+    // Helper: create overlay for a single card element
+    function createCardOverlay(it){
+      if(!it) return;
+      const thumb = it.querySelector('.thumb');
+      if(!thumb) return;
+      // avoid adding multiple overlays
+      if(thumb.querySelector('.card-overlay')) return;
+      const author = it.dataset.author || it.dataset.photographer || 'Unknown';
+      const avatar = it.dataset.authorAvatar || (it.querySelector('.thumb img') ? it.querySelector('.thumb img').src : '') || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=80&auto=format&fit=crop';
+      const downloadUrl = it.dataset.download || it.dataset.src || '';
+
+      // watermark (small badge top-left)
+      const wm = document.createElement('div');
+      wm.className = 'watermark';
+      wm.textContent = 'IG';
+      thumb.appendChild(wm);
+
+      // overlay container
+      const overlay = document.createElement('div');
+      overlay.className = 'card-overlay';
+
+      // author block
+      const authorDiv = document.createElement('div');
+      authorDiv.className = 'author';
+      const avatSpan = document.createElement('span');
+      avatSpan.className = 'avatar';
+      const avatImg = document.createElement('img');
+      avatImg.src = avatar;
+      avatImg.alt = author;
+      avatImg.addEventListener('error', ()=>{ avatImg.src = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="100%" height="100%" fill="%23ddd"/></svg>'); });
+      avatSpan.appendChild(avatImg);
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'name';
+      nameSpan.textContent = author;
+      authorDiv.appendChild(avatSpan);
+      authorDiv.appendChild(nameSpan);
+
+      // actions (download)
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const dlBtn = document.createElement('button');
+      dlBtn.className = 'download-btn';
+      dlBtn.title = 'Download';
+      dlBtn.innerHTML = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 20h14v-2H5v2zM12 3v10l4-4h-3V3h-2z"/></svg>';
+      dlBtn.addEventListener('click', (e)=>{
+        e.preventDefault();
+        e.stopPropagation();
+        if(!downloadUrl) return;
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        try{ a.download = ''; }catch(e){}
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      });
+      actions.appendChild(dlBtn);
+
+      overlay.appendChild(authorDiv);
+      overlay.appendChild(actions);
+      thumb.appendChild(overlay);
+    }
+
+    // initialize overlays for existing items
+    items.forEach(it => createCardOverlay(it));
+
+    // persist helpers
+    function saveSubmissions(){
+      try{ localStorage.setItem('gallery_submissions_v1', JSON.stringify(savedSubmissions)); }catch(e){ console.warn('Could not save submissions', e); }
+    }
+
+    function loadSavedSubmissions(){
+      if(!Array.isArray(savedSubmissions) || !savedSubmissions.length) return;
+      // insert saved items at top in reverse order (last saved appears first)
+      const copies = savedSubmissions.slice().reverse();
+      copies.forEach(s => {
+        // create without re-saving
+        createAndInsertItem(s, false);
+      });
+    }
+
+    // load persisted submissions after initializing existing items
+    loadSavedSubmissions();
+
+    // Analyze gallery items and update Top contributors dynamically
+    (function updateTopContributors(){
+      const contribList = document.querySelector('.contrib-list');
+      if(!contribList) return;
+
+      // Map of name -> {count, avatar}
+      const map = new Map();
+      document.querySelectorAll('#gallery .item').forEach(it => {
+        // prefer explicit data-author, then data-photographer, otherwise fall back to hostname
+        let name = it.dataset.author || it.dataset.photographer || '';
+        if(!name){
+          try{
+            const url = new URL(it.dataset.src, window.location.href);
+            // use domain (without tld) as a lightweight contributor label
+            const host = url.hostname.split('.').slice(-2, -1)[0] || url.hostname;
+            name = host || 'Unknown';
+          }catch(e){ name = 'Unknown' }
+        }
+
+        // avatar: prefer a dedicated data-author-avatar, otherwise use the thumb image src
+        const avatar = it.dataset.authorAvatar || (it.querySelector('.thumb img') ? it.querySelector('.thumb img').src : '');
+
+        const key = name.trim();
+        if(!map.has(key)) map.set(key, {count:0, avatar: avatar});
+        const rec = map.get(key);
+        rec.count += 1;
+        // keep first non-empty avatar
+        if(!rec.avatar && avatar) rec.avatar = avatar;
+      });
+
+      // Convert map to sorted array by count desc
+      const arr = Array.from(map.entries()).map(([name,info])=>({name, count: info.count, avatar: info.avatar}));
+      arr.sort((a,b)=>b.count - a.count);
+
+      // Take top 3
+      const top = arr.slice(0,3);
+      // Build HTML
+      contribList.innerHTML = '';
+      top.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'contrib';
+        const span = document.createElement('span');
+        span.className = 'avatar';
+        const img = document.createElement('img');
+        img.src = c.avatar || 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="100%" height="100%" fill="%23ddd"/></svg>');
+        img.alt = c.name;
+        img.addEventListener('error', ()=>{ img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="100%" height="100%" fill="%23ddd"/></svg>'); });
+        span.appendChild(img);
+        const meta = document.createElement('div');
+        const nameEl = document.createElement('div'); nameEl.style.fontWeight = '600'; nameEl.textContent = c.name;
+        const handleEl = document.createElement('div'); handleEl.style.fontSize='12px'; handleEl.style.color='#7f6f8b'; handleEl.textContent = '@' + c.name.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,16);
+        meta.appendChild(nameEl); meta.appendChild(handleEl);
+        div.appendChild(span); div.appendChild(meta);
+        contribList.appendChild(div);
+      });
+
+    })();
+
+    // Allow clicking history items on page (open by caption)
+    // Expose a small API on window for debugging/usage
+    window.galleryAPI = {open(index){ if(items[index]){ updateVisibleIndex(items[index]); openLightbox(currentIndex); }}}
+
+    // Submission modal logic
+    const submitModal = document.getElementById('submitModal');
+    const sTitle = document.getElementById('s-title');
+    const sCategory = document.getElementById('s-category');
+    const sSrc = document.getElementById('s-src');
+    const sThumb = document.getElementById('s-thumb');
+    const sAuthor = document.getElementById('s-author');
+    const sAvatar = document.getElementById('s-avatar');
+    const sCaption = document.getElementById('s-caption');
+    const sCancel = document.getElementById('s-cancel');
+    const sSubmit = document.getElementById('s-submit');
+
+    function openSubmitModal(){ submitModal.classList.add('open'); submitModal.setAttribute('aria-hidden','false'); sTitle.focus(); }
+    function closeSubmitModal(){ submitModal.classList.remove('open'); submitModal.setAttribute('aria-hidden','true'); }
+
+    // wire header CTA
+    const submitCTA = document.querySelector('.cta');
+    if(submitCTA) submitCTA.addEventListener('click', (e)=>{ e.preventDefault(); openSubmitModal(); });
+    if(sCancel) sCancel.addEventListener('click', (e)=>{ e.preventDefault(); closeSubmitModal(); });
+
+    // helper to attach thumb click & lightbox to a newly created item
+    function attachItemHandlers(it){
+      const link = it.querySelector('.thumb');
+      if(!link) return;
+      link.addEventListener('click', (ev)=>{ ev.preventDefault(); updateVisibleIndex(it); openLightbox(currentIndex); });
+    }
+
+    // Create an article element from form values and insert
+    function createAndInsertItem({title, category, src, thumb, author, avatar, caption}, saveToStorage = true){
+      const art = document.createElement('article');
+      art.className = 'item';
+      art.dataset.category = category;
+      art.dataset.src = src;
+      if(caption) art.dataset.caption = caption;
+      if(author) art.dataset.author = author;
+      if(avatar) art.dataset.authorAvatar = avatar;
+
+      const a = document.createElement('a');
+      a.className = 'thumb';
+      a.href = '#';
+      a.setAttribute('aria-label', 'Open ' + (title || 'Image'));
+      const img = document.createElement('img');
+      img.src = thumb && thumb.trim() ? thumb : src;
+      img.alt = title || '';
+      img.loading = 'lazy';
+      img.addEventListener('load', ()=> img.classList.add('loaded'));
+      img.addEventListener('error', ()=>{ const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="%23efe8f3"/></svg>'; img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg); img.classList.add('loaded'); });
+      a.appendChild(img);
+      art.appendChild(a);
+
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const t = document.createElement('div'); t.className = 'title'; t.textContent = title || '';
+      const c = document.createElement('div'); c.className = 'cat'; c.textContent = category.charAt(0).toUpperCase()+category.slice(1);
+      meta.appendChild(t); meta.appendChild(c);
+      art.appendChild(meta);
+
+      // insert at top of gallery
+      gallery.insertBefore(art, gallery.firstChild);
+      // maintain items array and visibleItems
+      items.unshift(art);
+      visibleItems = items.slice();
+
+      // create overlay and handlers
+      createCardOverlay(art);
+      attachItemHandlers(art);
+
+      // refresh contributors
+      try{ updateTopContributors(); }catch(e){}
+
+      // persist if requested
+      if(saveToStorage){
+        const stored = { title: title||'', category: category||'', src: src||'', thumb: thumb||'', author: author||'', avatar: avatar||'', caption: caption||'' };
+        savedSubmissions = savedSubmissions || [];
+        savedSubmissions.unshift(stored);
+        // limit to last 200 entries to avoid excessive storage
+        if(savedSubmissions.length > 200) savedSubmissions.length = 200;
+        saveSubmissions();
+      }
+    }
+
+    if(sSubmit){
+      sSubmit.addEventListener('click', (e)=>{
+        e.preventDefault();
+        const title = sTitle.value.trim();
+        const category = sCategory.value;
+        const src = sSrc.value.trim();
+        const thumb = sThumb.value.trim();
+        const author = sAuthor.value.trim();
+        const avatar = sAvatar.value.trim();
+        const caption = sCaption.value.trim() || title;
+        if(!title || !src || !category){
+          alert('Please provide at least a title, category and an image URL.');
+          return;
+        }
+        createAndInsertItem({title, category, src, thumb, author, avatar, caption});
+        closeSubmitModal();
+        // clear form
+        sTitle.value = sSrc.value = sThumb.value = sAuthor.value = sAvatar.value = sCaption.value = '';
+      });
+    }
+  </script>
+</body>
+</html>
